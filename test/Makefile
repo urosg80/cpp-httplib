@@ -1,5 +1,5 @@
 CXX = clang++
-CXXFLAGS = -g -std=c++11 -I. -Wall -Wextra -Wtype-limits -Wconversion -Wshadow # -fno-exceptions -DCPPHTTPLIB_NO_EXCEPTIONS -fsanitize=address
+CXXFLAGS = -g -std=c++11 -I. -Wall -Wextra -Wtype-limits -Wconversion -Wshadow $(EXTRA_CXXFLAGS) # -fno-exceptions -DCPPHTTPLIB_NO_EXCEPTIONS -fsanitize=address
 
 PREFIX ?= $(shell brew --prefix)
 
@@ -18,7 +18,10 @@ ZLIB_SUPPORT = -DCPPHTTPLIB_ZLIB_SUPPORT -lz
 BROTLI_DIR = $(PREFIX)/opt/brotli
 BROTLI_SUPPORT = -DCPPHTTPLIB_BROTLI_SUPPORT -I$(BROTLI_DIR)/include -L$(BROTLI_DIR)/lib -lbrotlicommon -lbrotlienc -lbrotlidec
 
-TEST_ARGS = gtest/gtest-all.cc gtest/gtest_main.cc $(OPENSSL_SUPPORT) $(ZLIB_SUPPORT) $(BROTLI_SUPPORT) -pthread -lcurl
+ZSTD_DIR = $(PREFIX)/opt/zstd
+ZSTD_SUPPORT = -DCPPHTTPLIB_ZSTD_SUPPORT -I$(ZSTD_DIR)/include -L$(ZSTD_DIR)/lib -lzstd
+
+TEST_ARGS = gtest/src/gtest-all.cc gtest/src/gtest_main.cc -Igtest -Igtest/include $(OPENSSL_SUPPORT) $(ZLIB_SUPPORT) $(BROTLI_SUPPORT) $(ZSTD_SUPPORT) -pthread -lcurl
 
 # By default, use standalone_fuzz_target_runner.
 # This runner does no fuzzing, but simply executes the inputs
@@ -28,6 +31,11 @@ TEST_ARGS = gtest/gtest-all.cc gtest/gtest_main.cc $(OPENSSL_SUPPORT) $(ZLIB_SUP
 # OSS-Fuzz will define its own value for LIB_FUZZING_ENGINE.
 LIB_FUZZING_ENGINE ?= standalone_fuzz_target_runner.o
 
+CLANG_FORMAT = clang-format
+REALPATH = $(shell which grealpath 2>/dev/null || which realpath 2>/dev/null)
+STYLE_CHECK_FILES = $(filter-out httplib.h httplib.cc, \
+	$(wildcard example/*.h example/*.cc fuzzing/*.h fuzzing/*.cc *.h *.cc ../httplib.h))
+
 all : test test_split
 	./test
 
@@ -36,6 +44,7 @@ proxy : test_proxy
 
 test : test.cc include_httplib.cc ../httplib.h Makefile cert.pem
 	$(CXX) -o $@ -I.. $(CXXFLAGS) test.cc include_httplib.cc $(TEST_ARGS)
+	@file $@
 
 # Note: The intention of test_split is to verify that it works to compile and
 # link the split httplib.h, so there is normally no need to execute it.
@@ -44,6 +53,28 @@ test_split : test.cc ../httplib.h httplib.cc Makefile cert.pem
 
 check_abi:
 	@./check-shared-library-abi-compatibility.sh
+
+.PHONY: style_check
+style_check: $(STYLE_CHECK_FILES)
+	@for file in $(STYLE_CHECK_FILES); do \
+		$(CLANG_FORMAT) $$file > $$file.formatted; \
+		if ! diff -u $$file $$file.formatted; then \
+			file2=$$($(REALPATH) --relative-to=.. $$file); \
+			printf "\n%*s\n" 80 | tr ' ' '#'; \
+			printf "##%*s##\n" 76; \
+			printf "##   %-70s   ##\n" "$$file2 not properly formatted. Please run clang-format."; \
+			printf "##%*s##\n" 76; \
+			printf "%*s\n\n" 80 | tr ' ' '#'; \
+			failed=1; \
+		fi; \
+		rm -f $$file.formatted; \
+	done; \
+	if [ -n "$$failed" ]; then \
+		echo "Style check failed for one or more files. See above for details."; \
+		false; \
+	else \
+		echo "All files are properly formatted."; \
+	fi
 
 test_proxy : test_proxy.cc ../httplib.h Makefile cert.pem
 	$(CXX) -o $@ -I.. $(CXXFLAGS) test_proxy.cc $(TEST_ARGS)
@@ -56,6 +87,7 @@ fuzz_test: server_fuzzer
 # Fuzz target, so that you can choose which $(LIB_FUZZING_ENGINE) to use.
 server_fuzzer : fuzzing/server_fuzzer.cc ../httplib.h standalone_fuzz_target_runner.o
 	$(CXX) -o $@ -I.. $(CXXFLAGS) $< $(OPENSSL_SUPPORT) $(ZLIB_SUPPORT) $(BROTLI_SUPPORT) $(LIB_FUZZING_ENGINE) -pthread
+	@file $@
 
 # Standalone fuzz runner, which just reads inputs from fuzzing/corpus/ dir and
 # feeds it to server_fuzzer.
@@ -69,5 +101,5 @@ cert.pem:
 	./gen-certs.sh
 
 clean:
-	rm -rf test test_split test_proxy server_fuzzer *.pem *.0 *.o *.1 *.srl httplib.h httplib.cc _build*
+	rm -rf test test_split test_proxy server_fuzzer *.pem *.0 *.o *.1 *.srl httplib.h httplib.cc _build* *.dSYM
 

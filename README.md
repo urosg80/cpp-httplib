@@ -406,11 +406,11 @@ svr.Get("/chunked", [&](const Request& req, Response& res) {
 
 ```cpp
 svr.Get("/content", [&](const Request &req, Response &res) {
-  res.set_file_content("./path/to/conent.html");
+  res.set_file_content("./path/to/content.html");
 });
 
 svr.Get("/content", [&](const Request &req, Response &res) {
-  res.set_file_content("./path/to/conent", "text/html");
+  res.set_file_content("./path/to/content", "text/html");
 });
 ```
 
@@ -462,7 +462,7 @@ Please see [Server example](https://github.com/yhirose/cpp-httplib/blob/master/e
 
 ### Default thread pool support
 
-`ThreadPool` is used as a **default** task queue, and the default thread count is 8, or `std::thread::hardware_concurrency()`. You can change it with `CPPHTTPLIB_THREAD_POOL_COUNT`.
+`ThreadPool` is used as the **default** task queue, with a default thread count of 8 or `std::thread::hardware_concurrency() - 1`, whichever is greater. You can change it with `CPPHTTPLIB_THREAD_POOL_COUNT`.
 
 If you want to set the thread count at runtime, there is no convenient way... But here is how.
 
@@ -843,7 +843,7 @@ Please see https://github.com/google/brotli for more detail.
 
 ### Default `Accept-Encoding` value
 
-The default `Acdcept-Encoding` value contains all possible compression types. So, the following two examples are same.
+The default `Accept-Encoding` value contains all possible compression types. So, the following two examples are same.
 
 ```c++
 res = cli.Get("/resource/foo");
@@ -872,11 +872,6 @@ res->body; // Compressed data
 
 ```
 
-Use `poll` instead of `select`
-------------------------------
-
-`select` system call is used as default since it's more widely supported. If you want to let cpp-httplib use `poll` instead, you can do so with `CPPHTTPLIB_USE_POLL`.
-
 Unix Domain Socket Support
 --------------------------
 
@@ -884,7 +879,7 @@ Unix Domain Socket support is available on Linux and macOS.
 
 ```c++
 // Server
-httplib::Server svr("./my-socket.sock");
+httplib::Server svr;
 svr.set_address_family(AF_UNIX).listen("./my-socket.sock", 80);
 
 // Client
