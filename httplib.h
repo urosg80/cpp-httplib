@@ -158,6 +158,10 @@
 #define _CRT_NONSTDC_NO_DEPRECATE
 #endif //_CRT_NONSTDC_NO_DEPRECATE
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif //NOMINMAX
+
 #if defined(_MSC_VER)
 #if _MSC_VER < 1900
 #error Sorry, Visual Studio versions prior to 2015 are not supported
